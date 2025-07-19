@@ -1,0 +1,3 @@
+#!/bin/bash
+# Install additional packages or run setup commands
+pip install --upgrade pip
