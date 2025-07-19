@@ -1,5 +1,7 @@
 Three AI Concepts Poised to Shape 2026
 
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/romado33/ai-concepts-2026/main)
+
 🚀 Click the "Launch Binder" button above to run all examples in your browser - no installation required!
 Overview
 This repository contains working Python implementations of six cutting-edge AI concepts that are poised to transform the field by 2026. Each example is fully documented, executable, and demonstrates real-world applications.
