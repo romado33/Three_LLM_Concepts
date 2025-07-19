@@ -1,0 +1,148 @@
+import torch
+import torch.nn as nn
+from transformers import BertTokenizer, BertModel
+import numpy as np
+
+class MultiModalEncoder(nn.Module):
+    """
+    A neural network that processes both text and numerical data simultaneously.
+
+    Architecture:
+    1. Text Encoder: Uses BERT to understand text meaning
+    2. Metadata Encoder: Neural network to process numerical features
+    3. Fusion Layer: Combines both types of information intelligently
+    """
+
+    def __init__(self, text_dim=768, metadata_dim=10, output_dim=256):
+        super().__init__()
+
+        # Text encoder: BERT model that converts text to 768-dimensional vectors
+        self.text_encoder = BertModel.from_pretrained('bert-base-uncased')
+        # Project BERT's 768 dimensions down to our desired output size
+        self.text_projection = nn.Linear(text_dim, output_dim)
+
+        # Metadata encoder: Neural network for numerical features (prices, dates, etc.)
+        self.metadata_encoder = nn.Sequential(
+            nn.Linear(metadata_dim, 128),  # First layer: expand to 128 dimensions
+            nn.ReLU(),                     # Activation function
+            nn.Linear(128, output_dim)     # Second layer: compress to output size
+        )
+
+        # Fusion layer: Intelligently combines text and metadata features
+        self.fusion = nn.Sequential(
+            nn.Linear(output_dim * 2, output_dim),  # Input: concatenated features
+            nn.ReLU(),
+            nn.Linear(output_dim, output_dim)       # Output: fused representation
+        )
+
+    def forward(self, text_inputs, metadata):
+        """
+        Process text and metadata together.
+
+        Args:
+            text_inputs: Tokenized text from BERT tokenizer
+            metadata: Numerical features (prices, dates, etc.)
+
+        Returns:
+            Fused features that capture both text meaning and numerical context
+        """
+        # Step 1: Process text through BERT
+        text_outputs = self.text_encoder(**text_inputs)
+        # Extract the [CLS] token representation (summary of entire text)
+        text_features = self.text_projection(text_outputs.pooler_output)
+
+        # Step 2: Process numerical metadata
+        metadata_features = self.metadata_encoder(metadata)
+
+        # Step 3: Combine both feature types
+        combined = torch.cat([text_features, metadata_features], dim=1)
+
+        # Step 4: Fuse the combined features intelligently
+        fused_features = self.fusion(combined)
+
+        return fused_features, text_features, metadata_features
+
+# Demo usage with detailed explanation
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+model = MultiModalEncoder()
+
+# Example: Trading bot processing news + market data
+text = "Market volatility increases due to inflation concerns"
+
+# Metadata represents real market data:
+# [Year, Month, Day, Interest_Rate, Inflation_Rate, VIX_Index, Stock_Price, Dollar_Index, Oil_Price, Gold_Price]
+metadata = torch.tensor([[2025.0, 7.0, 15.0, 1.05, 0.15, 2.3, 45.2, 0.8, 12.5, 3.2]])
+
+print("=== ENCODER STACKING DEMONSTRATION ===")
+print(f"Input text: '{text}'")
+print(f"Input metadata: {metadata.numpy().flatten()}")
+print(f"Metadata represents: [Year, Month, Day, Interest_Rate, Inflation_Rate, VIX_Index, Stock_Price, Dollar_Index, Oil_Price, Gold_Price]")
+print()
+
+# Tokenize the text
+text_inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True)
+print(f"Tokenized text: {tokenizer.convert_ids_to_tokens(text_inputs['input_ids'][0])}")
+print()
+
+# Process through the model
+with torch.no_grad():  # No gradient calculation needed for inference
+    fused_features, text_features, metadata_features = model(text_inputs, metadata)
+
+print("=== PROCESSING RESULTS ===")
+print(f"Text features shape: {text_features.shape} (256-dimensional text representation)")
+print(f"Metadata features shape: {metadata_features.shape} (256-dimensional numerical representation)")
+print(f"Fused features shape: {fused_features.shape} (256-dimensional combined representation)")
+print()
+
+print("=== WHAT THE OUTPUT MEANS ===")
+print("The fused features are a 256-dimensional vector that captures BOTH:")
+print("1. The semantic meaning of the text (market sentiment, topics)")
+print("2. The numerical context (actual market conditions)")
+print()
+
+# Show feature magnitudes to understand the numbers
+text_magnitude = torch.norm(text_features).item()
+metadata_magnitude = torch.norm(metadata_features).item()
+fused_magnitude = torch.norm(fused_features).item()
+
+print(f"Text feature magnitude: {text_magnitude:.2f}")
+print(f"Metadata feature magnitude: {metadata_magnitude:.2f}")
+print(f"Fused feature magnitude: {fused_magnitude:.2f}")
+print()
+
+print("Sample fused feature values:")
+sample_values = fused_features[0][:10].detach().numpy()
+for i, val in enumerate(sample_values):
+    print(f"  Feature {i+1}: {val:.3f}")
+
+print()
+print("=== PRACTICAL APPLICATION ===")
+print("This fused representation can now be used for:")
+print("• Market prediction (combining news sentiment + actual data)")
+print("• Risk assessment (text analysis + numerical indicators)")
+print("• Automated trading decisions (holistic market understanding)")
+print("• Alert systems (correlating news events with market movements)")
+
+# Demonstrate similarity between different inputs
+print("\n=== COMPARING DIFFERENT INPUTS ===")
+
+# Test with different text but similar metadata
+text2 = "Economic uncertainty rises amid Federal Reserve policy changes"
+text_inputs2 = tokenizer(text2, return_tensors="pt", padding=True, truncation=True)
+
+with torch.no_grad():
+    fused_features2, _, _ = model(text_inputs2, metadata)
+
+# Calculate similarity between the two fused representations
+similarity = torch.cosine_similarity(fused_features, fused_features2, dim=1)
+print(f"Similarity between different news texts (same market data): {similarity.item():.3f}")
+print("(1.0 = identical, 0.0 = unrelated, -1.0 = opposite)")
+
+# Test with same text but different metadata (different market conditions)
+metadata2 = torch.tensor([[2025.0, 7.0, 15.0, 0.5, 0.02, 1.1, 85.7, 1.2, 8.3, 2.8]])  # Better market conditions
+with torch.no_grad():
+    fused_features3, _, _ = model(text_inputs, metadata2)
+
+similarity2 = torch.cosine_similarity(fused_features, fused_features3, dim=1)
+print(f"Similarity with same news but different market data: {similarity2.item():.3f}")
+print("This shows how the model captures the interaction between text and numerical context!")
